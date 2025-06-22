@@ -1,89 +1,12 @@
 import os
-from typing import List, Optional
-from fastapi import FastAPI, Query
-import pymysql
+from fastapi import FastAPI
 from dotenv import load_dotenv
-from collections import defaultdict
 
+# Cargar variables de entorno
 load_dotenv()
 
 app = FastAPI(title="API Combos Bar - Backstage", version="2.0")
 
-def get_connection():
-    return pymysql.connect(
-        host=os.getenv("MYSQL_HOST", "localhost"),
-        user=os.getenv("MYSQL_USER"),
-        password=os.getenv("MYSQL_PASSWORD"),
-        db=os.getenv("MYSQL_DB"),
-        port=int(os.getenv("MYSQL_PORT", 3306)),
-        cursorclass=pymysql.cursors.DictCursor
-    )
-
-@app.get("/combos/", summary="Combos con ingredientes, precios por día y categoría")
-def get_combos(
-    ids: Optional[List[int]] = Query(None, description="IDs de combos separados por coma"),
-    id_dia: Optional[int] = Query(None, description="ID del día para filtrar precios"),
-    categoria: Optional[str] = Query(None, description="Nombre de la categoría")
-):
-    conn = get_connection()
-    try:
-        with conn.cursor() as cursor:
-            sql = "SELECT * FROM vw_combo_detalle_precios"
-            params = []
-            filters = []
-
-            if ids:
-                placeholders = ",".join(["%s"] * len(ids))
-                filters.append(f"id_combo_coctel IN ({placeholders})")
-                params.extend(ids)
-
-            if id_dia:
-                filters.append("id_dia = %s")
-                params.append(id_dia)
-
-            if categoria:
-                filters.append("nombre_categoria = %s")
-                params.append(categoria)
-
-            if filters:
-                sql += " WHERE " + " AND ".join(filters)
-
-            sql += " ORDER BY id_combo_coctel, id_dia, tipoRequerimiento"
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
-    finally:
-        conn.close()
-
-    # ...código igual...
-
-    combos = {}
-    for row in rows:
-        combo_id = row["id_combo_coctel"]
-        if combo_id not in combos:
-            combos[combo_id] = {
-                "id_combo_coctel": combo_id,
-                "nombre_combo": row["nombre_combo"],
-                "nombre_categoria": row["nombre_categoria"],
-                "unidad_venta": row["unidad_venta"],
-                "descripcion_combo": row.get("descripcion_combo", ""),
-                "precios": [],
-                "ingredientes": []
-            }
-        ingrediente = {
-            "codigoProducto": row["codigoProducto"],
-            "nombreProdcuto": row["nombreProdcuto"],
-            "medida": row["medida"],
-            "contenidoProd": row["contenidoProd"],
-            "cantidad_detalle": row["cantidad_detalle"],
-            "detalleProd": row["detalleProd"],
-            "cantidad": row["cantidad"],
-            "requerido": row["requerido"],
-            "tipoRequerimiento": row["tipoRequerimiento"]
-        }
-        if ingrediente not in combos[combo_id]["ingredientes"]:
-            combos[combo_id]["ingredientes"].append(ingrediente)
-        precio_entry = {"id_dia": row["id_dia"], "precio_venta": row["precio_venta"]}
-        if precio_entry not in combos[combo_id]["precios"]:
-            combos[combo_id]["precios"].append(precio_entry)
-
-    return list(combos.values())
+# Monta el router
+from app.routes.combos import router as combos_router
+app.include_router(combos_router)
